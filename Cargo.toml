@@ -1,7 +1,7 @@
 [package]
 name = "laneful-rs"
-version = "0.1.0"
-edition = "2021"
+version = "0.1.1"
+edition = "2024"
 license = "MIT"
 description = "Rust SDK for Laneful email sending API"
 repository = "https://github.com/lanefulhq/laneful-rust"
