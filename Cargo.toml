@@ -1,0 +1,30 @@
+[package]
+name = "laneful-rs"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Rust SDK for Laneful email sending API"
+repository = "https://github.com/lanefulhq/laneful-rust"
+homepage = "https://laneful.com/docs/rust-sdk/"
+keywords = ["email", "laneful", "api", "smtp"]
+categories = ["email", "api-bindings"]
+readme = "README.md"
+
+[features]
+default = ["rustls"]
+
+# Async API (additive - sync is always available)
+async = []
+
+# TLS backend features (mutually exclusive)
+native-tls = ["reqwest/native-tls"]
+rustls = ["reqwest/rustls-tls"]
+
+[dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json", "blocking"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
