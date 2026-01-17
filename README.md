@@ -1,3 +1,6 @@
+[![laneful-rs](https://img.shields.io/crates/v/laneful-rs.svg)](https://crates.io/crates/laneful-rs)
+
+
 # laneful-rs
 
 Rust SDK for the Laneful email sending API.
