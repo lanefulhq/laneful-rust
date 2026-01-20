@@ -55,6 +55,7 @@ mod builder;
 mod client;
 mod error;
 mod models;
+mod webhook;
 
 pub use builder::EmailBuilder;
 pub use client::LanefulClient;
@@ -63,3 +64,4 @@ pub use models::{
     ApiErrorResponse, Attachment, Email, EmailAddress, SendEmailRequest, SendEmailResponse,
     Tracking,
 };
+pub use webhook::verify_webhook_signature;

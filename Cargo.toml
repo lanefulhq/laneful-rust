@@ -1,6 +1,6 @@
 [package]
 name = "laneful-rs"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 license = "MIT"
 description = "Rust SDK for Laneful email sending API"
@@ -25,6 +25,11 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "blo
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
+hmac = "0.12"
+sha2 = "0.10"
+subtle = "2.5"
+hex = "0.4"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+axum = "0.8"
