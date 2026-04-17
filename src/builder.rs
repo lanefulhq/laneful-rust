@@ -14,6 +14,7 @@ const MAX_WEBHOOK_DATA_VALUE_LENGTH: usize = 100;
 #[derive(Debug, Default)]
 pub struct EmailBuilder {
     from: Option<EmailAddress>,
+    from_header: Option<EmailAddress>,
     to: Vec<EmailAddress>,
     subject: Option<String>,
     text_content: Option<String>,
@@ -40,6 +41,15 @@ impl EmailBuilder {
     /// Set the sender email address.
     pub fn from(mut self, email: impl Into<String>, name: Option<&str>) -> Self {
         self.from = Some(match name {
+            Some(n) => EmailAddress::with_name(email, n),
+            None => EmailAddress::new(email),
+        });
+        self
+    }
+
+    /// Set the sender visible email address.
+    pub fn from_header(mut self, email: impl Into<String>, name: Option<&str>) -> Self {
+        self.from_header = Some(match name {
             Some(n) => EmailAddress::with_name(email, n),
             None => EmailAddress::new(email),
         });
@@ -216,6 +226,7 @@ impl EmailBuilder {
 
         Ok(Email {
             from,
+            from_header: self.from_header,
             to: self.to,
             subject,
             text_content: self.text_content,
