@@ -85,6 +85,9 @@ pub struct Tracking {
 pub struct Email {
     /// Sender email address (required).
     pub from: EmailAddress,
+    /// Optional "from" header for display purposes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_header: Option<EmailAddress>,
     /// Primary recipients (required).
     pub to: Vec<EmailAddress>,
     /// Email subject line (required).
