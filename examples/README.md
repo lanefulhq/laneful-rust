@@ -9,6 +9,15 @@ export LANEFUL_ENDPOINT="https://your-laneful-endpoint.com"
 export LANEFUL_API_KEY="your-api-key"
 ```
 
+Organization API examples also use:
+
+```bash
+export LANEFUL_ORG_BASE_URL="https://api.laneful.net"
+export LANEFUL_WORKSPACE_ID="1"
+```
+
+Development org host is `https://api.dev.laneful.net`.
+
 ## Sync Example
 
 ```bash
@@ -19,6 +28,22 @@ cargo run --example sync -- --from sender@example.com --to recipient@example.com
 
 ```bash
 cargo run --example async --features async -- --from sender@example.com --to recipient@example.com
+```
+
+## Mail settings
+
+```bash
+export LANEFUL_FROM_EMAIL="sender@example.com"
+export LANEFUL_TO_EMAIL="recipient@example.com"
+cargo run --example mail_settings
+```
+
+## Domains, unsubscribe groups, and analytics
+
+```bash
+cargo run --example domains
+cargo run --example unsubscribe_groups
+cargo run --example analytics
 ```
 
 ## Webhook Server

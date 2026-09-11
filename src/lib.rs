@@ -42,7 +42,7 @@
 //! Enable the `async` feature in your `Cargo.toml`:
 //!
 //! ```toml
-//! laneful-rs = { version = "0.1", features = ["async"] }
+//! laneful-rs = { version = "0.2", features = ["async"] }
 //! ```
 //!
 //! Then use the async methods:
@@ -55,13 +55,27 @@ mod builder;
 mod client;
 mod error;
 mod models;
+mod org;
 mod webhook;
 
 pub use builder::EmailBuilder;
 pub use client::LanefulClient;
 pub use error::{LanefulError, Result};
 pub use models::{
-    ApiErrorResponse, Attachment, Email, EmailAddress, SendEmailRequest, SendEmailResponse,
-    Tracking,
+    ApiErrorResponse, Attachment, Email, EmailAddress, MailSettings, SendEmailRequest,
+    SendEmailResponse, Tracking,
 };
-pub use webhook::verify_webhook_signature;
+pub use org::{
+    CreateDomainRequest, Domain, DomainSpamRatioRadar, GooglePostmasterSpamReport,
+    ListDomainSpamRatioRadarParams, ListDomainSpamRatioRadarResponse, ListDomainsParams,
+    ListDomainsResponse, ListGooglePostmasterSpamReportsParams,
+    ListGooglePostmasterSpamReportsResponse, ListSndsReportsParams, ListSndsReportsResponse,
+    ListUnsubscribeGroupsParams, ListUnsubscribeGroupsResponse, QueryItems, SNDS_FILTER_GREEN,
+    SNDS_FILTER_RED, SNDS_FILTER_UNKNOWN, SNDS_FILTER_YELLOW, SndsReport, SuccessResponse,
+    UnsubscribeGroup, UpdateDomainRequest,
+};
+pub use webhook::{
+    WEBHOOK_EVENT_BOUNCE, WEBHOOK_EVENT_CLICK, WEBHOOK_EVENT_DELIVERY, WEBHOOK_EVENT_DROP,
+    WEBHOOK_EVENT_OPEN, WEBHOOK_EVENT_REQUEST, WEBHOOK_EVENT_SPAM_COMPLAINT, WEBHOOK_EVENT_TYPES,
+    WEBHOOK_EVENT_UNSUBSCRIBE, is_valid_webhook_event, verify_webhook_signature,
+};

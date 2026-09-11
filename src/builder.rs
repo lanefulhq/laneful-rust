@@ -206,7 +206,7 @@ impl EmailBuilder {
         if !self.webhook_data.is_empty() {
             if self.webhook_data.len() > MAX_WEBHOOK_DATA_KEYS {
                 return Err(LanefulError::ValidationError(
-                    "webhook_data exceeds 10 keys".into(),
+                    "webhook_data exceeds 20 keys".into(),
                 ));
             }
 
@@ -270,5 +270,30 @@ impl Email {
     /// Create a new email builder.
     pub fn builder() -> EmailBuilder {
         EmailBuilder::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::LanefulError;
+
+    #[test]
+    fn webhook_data_rejects_more_than_20_keys() {
+        let mut builder = Email::builder()
+            .from("sender@test.com", None)
+            .to("recipient@test.com", None)
+            .subject("Test")
+            .text_content("Hello");
+        for i in 0..21 {
+            builder = builder.webhook_data(format!("k{i}"), "v");
+        }
+        let err = builder.build().unwrap_err();
+        match err {
+            LanefulError::ValidationError(message) => {
+                assert!(message.contains("20 keys"));
+            }
+            other => panic!("unexpected error: {other}"),
+        }
     }
 }

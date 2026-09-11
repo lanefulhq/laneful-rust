@@ -20,6 +20,10 @@ pub enum LanefulError {
     /// Email validation failed.
     #[error("Validation error: {0}")]
     ValidationError(String),
+
+    /// Failed to parse an API response.
+    #[error("failed to parse response: {0}")]
+    ParseError(#[from] serde_json::Error),
 }
 
 /// Result type alias for Laneful operations.
