@@ -78,6 +78,9 @@ pub struct Tracking {
     /// Optional unsubscribe group ID.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unsubscribe_group_id: Option<u64>,
+    /// Optional unsubscribe group name (ignored if unsubscribe_group_id is set).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unsubscribe_group_name: Option<String>,
 }
 
 /// A single email to be sent.
@@ -133,11 +136,27 @@ pub struct Email {
     pub tracking: Option<Tracking>,
 }
 
+/// Request-level mail settings (sandbox mode, return message IDs).
+///
+/// Unset fields (`None`) are omitted. Explicit `Some(false)` is serialized.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MailSettings {
+    /// When enabled, messages are not persisted or sent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sandbox_mode: Option<bool>,
+    /// When enabled, the API response includes message IDs for each email sent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub return_message_ids: Option<bool>,
+}
+
 /// Request body for sending emails.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SendEmailRequest {
     /// List of emails to send.
     pub emails: Vec<Email>,
+    /// Optional request-level mail settings.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mail_settings: Option<MailSettings>,
 }
 
 /// Response from the send email endpoint.
@@ -145,6 +164,24 @@ pub struct SendEmailRequest {
 pub struct SendEmailResponse {
     /// Status of the request (e.g., "accepted").
     pub status: String,
+    /// Message IDs when return_message_ids is enabled.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_ids: Option<Vec<String>>,
+    /// Single message ID when present on the payload.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_id: Option<String>,
+}
+
+impl SendEmailResponse {
+    /// First message ID from `message_id` or `message_ids`.
+    pub fn first_message_id(&self) -> Option<&str> {
+        self.message_id.as_deref().or_else(|| {
+            self.message_ids
+                .as_ref()
+                .and_then(|ids| ids.first())
+                .map(String::as_str)
+        })
+    }
 }
 
 /// Error response from the API.
@@ -152,4 +189,58 @@ pub struct SendEmailResponse {
 pub struct ApiErrorResponse {
     /// Error message.
     pub error: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mail_settings_omits_unset_and_sends_false() {
+        assert_eq!(
+            serde_json::to_value(MailSettings::default()).unwrap(),
+            serde_json::json!({})
+        );
+        assert_eq!(
+            serde_json::to_value(MailSettings {
+                sandbox_mode: Some(false),
+                return_message_ids: Some(false),
+            })
+            .unwrap(),
+            serde_json::json!({
+                "sandbox_mode": false,
+                "return_message_ids": false,
+            })
+        );
+    }
+
+    #[test]
+    fn tracking_serializes_false_and_group_name() {
+        let tracking = Tracking {
+            opens: Some(true),
+            clicks: Some(false),
+            unsubscribes: Some(true),
+            unsubscribe_group_id: None,
+            unsubscribe_group_name: Some("Newsletters".into()),
+        };
+        assert_eq!(
+            serde_json::to_value(tracking).unwrap(),
+            serde_json::json!({
+                "opens": true,
+                "clicks": false,
+                "unsubscribes": true,
+                "unsubscribe_group_name": "Newsletters",
+            })
+        );
+    }
+
+    #[test]
+    fn send_response_falls_back_to_first_message_id() {
+        let response: SendEmailResponse = serde_json::from_value(serde_json::json!({
+            "status": "accepted",
+            "message_ids": ["msg_1", "msg_2"]
+        }))
+        .unwrap();
+        assert_eq!(response.first_message_id(), Some("msg_1"));
+    }
 }
