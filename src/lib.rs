@@ -6,14 +6,14 @@
 //!
 //! - **Sync API**: Always available (default)
 //! - **Async API**: Enable with the `async` feature
-//! - **TLS backends**: `native-tls` (default) or `rustls`
+//! - **TLS backends**: `rustls` (default) or `native-tls`
 //!
 //! ## Quick Start
 //!
 //! ```no_run
 //! use laneful_rs::{LanefulClient, Email};
 //!
-//! let client = LanefulClient::new("https://custom-endpoint.api.laneful.com", "my-api-key").unwrap();
+//! let client = LanefulClient::new("https://custom-endpoint.send.laneful.net", "my-api-key").unwrap();
 //!
 //! let email = Email::builder()
 //!     .from("sender@example.com", Some("Sender Name"))
