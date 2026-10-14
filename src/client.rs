@@ -13,8 +13,16 @@ use reqwest::Method;
 use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue, USER_AGENT};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use std::sync::OnceLock;
+use std::time::Duration;
 
 const USER_AGENT_VALUE: &str = concat!("laneful-rust/", env!("CARGO_PKG_VERSION"));
+
+/// Request timeout for both the blocking and the async HTTP client.
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Maximum length of an idempotency key, in bytes, accepted by the send API.
+const MAX_IDEMPOTENCY_KEY_BYTES: usize = 36;
 
 /// Client for the Laneful Email API.
 ///
@@ -27,11 +35,27 @@ pub struct LanefulClient {
     base_url: String,
     /// API key for authentication.
     api_key: String,
-    /// Blocking HTTP client (always available).
-    blocking_client: reqwest::blocking::Client,
+    /// Default headers shared by both HTTP clients.
+    headers: HeaderMap,
+    /// Blocking HTTP client, built on first use. Building it inside an async runtime panics,
+    /// so async-only callers must never construct it.
+    blocking_client: OnceLock<reqwest::blocking::Client>,
     /// Async HTTP client (available when async feature is enabled).
     #[cfg(feature = "async")]
     async_client: reqwest::Client,
+}
+
+/// Checks the idempotency key against the send API's 1 to 36 byte limit.
+fn validate_mail_settings(mail_settings: Option<&MailSettings>) -> Result<()> {
+    let invalid = mail_settings
+        .and_then(|settings| settings.idempotency_key.as_deref())
+        .is_some_and(|key| key.is_empty() || key.len() > MAX_IDEMPOTENCY_KEY_BYTES);
+    if invalid {
+        return Err(LanefulError::ValidationError(
+            "idempotency_key must contain between 1 and 36 bytes".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn default_headers(api_key: &str) -> Result<HeaderMap> {
@@ -126,22 +150,33 @@ impl LanefulClient {
         }
 
         let headers = default_headers(&api_key)?;
-        let blocking_client = reqwest::blocking::Client::builder()
-            .default_headers(headers.clone())
-            .build()?;
 
         #[cfg(feature = "async")]
         let async_client = reqwest::Client::builder()
-            .default_headers(headers)
+            .default_headers(headers.clone())
+            .timeout(DEFAULT_TIMEOUT)
             .build()?;
 
         Ok(Self {
             base_url,
             api_key,
-            blocking_client,
+            headers,
+            blocking_client: OnceLock::new(),
             #[cfg(feature = "async")]
             async_client,
         })
+    }
+
+    /// Returns the blocking HTTP client, building it on first use.
+    fn blocking_client(&self) -> Result<&reqwest::blocking::Client> {
+        if let Some(client) = self.blocking_client.get() {
+            return Ok(client);
+        }
+        let client = reqwest::blocking::Client::builder()
+            .default_headers(self.headers.clone())
+            .timeout(DEFAULT_TIMEOUT)
+            .build()?;
+        Ok(self.blocking_client.get_or_init(|| client))
     }
 
     fn v1_url(&self, path: &str) -> String {
@@ -156,7 +191,7 @@ impl LanefulClient {
         query: &[(String, String)],
     ) -> Result<T> {
         let mut request = self
-            .blocking_client
+            .blocking_client()?
             .request(method, self.v1_url(path))
             .header("Authorization", format!("Bearer {}", self.api_key));
 
@@ -223,6 +258,7 @@ impl LanefulClient {
         emails: Vec<Email>,
         mail_settings: Option<MailSettings>,
     ) -> Result<SendEmailResponse> {
+        validate_mail_settings(mail_settings.as_ref())?;
         let request = SendEmailRequest {
             emails,
             mail_settings,
@@ -510,6 +546,7 @@ impl LanefulClient {
         emails: Vec<Email>,
         mail_settings: Option<MailSettings>,
     ) -> Result<SendEmailResponse> {
+        validate_mail_settings(mail_settings.as_ref())?;
         let request = SendEmailRequest {
             emails,
             mail_settings,
@@ -788,6 +825,7 @@ mod tests {
                 Some(MailSettings {
                     sandbox_mode: Some(true),
                     return_message_ids: Some(true),
+                    ..Default::default()
                 }),
             )
             .unwrap();
@@ -910,5 +948,72 @@ mod tests {
     fn rejects_empty_config() {
         assert!(LanefulClient::new("", "token").is_err());
         assert!(LanefulClient::new("https://test.laneful.net", "").is_err());
+    }
+
+    #[test]
+    fn send_includes_idempotency_key() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("POST", "/v1/email/send")
+            .match_body(Matcher::PartialJsonString(
+                r#"{"mail_settings":{"idempotency_key":"order-1234"}}"#.into(),
+            ))
+            .with_status(200)
+            .with_body(r#"{"status":"accepted"}"#)
+            .create();
+
+        let client = LanefulClient::new(server.url(), "test-token").unwrap();
+        let response = client
+            .send_one_with_mail_settings(
+                sample_email(),
+                Some(MailSettings {
+                    idempotency_key: Some("order-1234".into()),
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+
+        mock.assert();
+        assert_eq!(response.status, "accepted");
+    }
+
+    #[test]
+    fn rejects_invalid_idempotency_key_before_sending() {
+        let mut server = mockito::Server::new();
+        let mock = server.mock("POST", "/v1/email/send").expect(0).create();
+        let client = LanefulClient::new(server.url(), "test-token").unwrap();
+
+        for key in [String::new(), "k".repeat(37), "é".repeat(19)] {
+            let result = client.send_one_with_mail_settings(
+                sample_email(),
+                Some(MailSettings {
+                    idempotency_key: Some(key),
+                    ..Default::default()
+                }),
+            );
+            assert!(matches!(result, Err(LanefulError::ValidationError(_))));
+        }
+        mock.assert();
+    }
+
+    /// The client used to build a blocking reqwest client in `new`, which panics when
+    /// created or dropped inside an async runtime.
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn async_client_can_be_created_used_and_dropped_inside_a_runtime() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/v1/email/send")
+            .with_status(200)
+            .with_body(r#"{"status":"accepted"}"#)
+            .create_async()
+            .await;
+
+        let client = LanefulClient::new(server.url(), "test-token").unwrap();
+        let response = client.send_one_async(sample_email()).await.unwrap();
+        drop(client);
+
+        mock.assert_async().await;
+        assert_eq!(response.status, "accepted");
     }
 }
