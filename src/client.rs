@@ -13,8 +13,13 @@ use reqwest::Method;
 use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue, USER_AGENT};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use std::sync::OnceLock;
+use std::time::Duration;
 
 const USER_AGENT_VALUE: &str = concat!("laneful-rust/", env!("CARGO_PKG_VERSION"));
+
+/// Request timeout for both the blocking and the async HTTP client.
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Client for the Laneful Email API.
 ///
@@ -27,8 +32,11 @@ pub struct LanefulClient {
     base_url: String,
     /// API key for authentication.
     api_key: String,
-    /// Blocking HTTP client (always available).
-    blocking_client: reqwest::blocking::Client,
+    /// Default headers shared by both HTTP clients.
+    headers: HeaderMap,
+    /// Blocking HTTP client, built on first use. Building it inside an async runtime panics,
+    /// so async-only callers must never construct it.
+    blocking_client: OnceLock<reqwest::blocking::Client>,
     /// Async HTTP client (available when async feature is enabled).
     #[cfg(feature = "async")]
     async_client: reqwest::Client,
@@ -126,22 +134,33 @@ impl LanefulClient {
         }
 
         let headers = default_headers(&api_key)?;
-        let blocking_client = reqwest::blocking::Client::builder()
-            .default_headers(headers.clone())
-            .build()?;
 
         #[cfg(feature = "async")]
         let async_client = reqwest::Client::builder()
-            .default_headers(headers)
+            .default_headers(headers.clone())
+            .timeout(DEFAULT_TIMEOUT)
             .build()?;
 
         Ok(Self {
             base_url,
             api_key,
-            blocking_client,
+            headers,
+            blocking_client: OnceLock::new(),
             #[cfg(feature = "async")]
             async_client,
         })
+    }
+
+    /// Returns the blocking HTTP client, building it on first use.
+    fn blocking_client(&self) -> Result<&reqwest::blocking::Client> {
+        if let Some(client) = self.blocking_client.get() {
+            return Ok(client);
+        }
+        let client = reqwest::blocking::Client::builder()
+            .default_headers(self.headers.clone())
+            .timeout(DEFAULT_TIMEOUT)
+            .build()?;
+        Ok(self.blocking_client.get_or_init(|| client))
     }
 
     fn v1_url(&self, path: &str) -> String {
@@ -156,7 +175,7 @@ impl LanefulClient {
         query: &[(String, String)],
     ) -> Result<T> {
         let mut request = self
-            .blocking_client
+            .blocking_client()?
             .request(method, self.v1_url(path))
             .header("Authorization", format!("Bearer {}", self.api_key));
 
@@ -910,5 +929,26 @@ mod tests {
     fn rejects_empty_config() {
         assert!(LanefulClient::new("", "token").is_err());
         assert!(LanefulClient::new("https://test.laneful.net", "").is_err());
+    }
+
+    /// The client used to build a blocking reqwest client in `new`, which panics when
+    /// created or dropped inside an async runtime.
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn async_client_can_be_created_used_and_dropped_inside_a_runtime() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/v1/email/send")
+            .with_status(200)
+            .with_body(r#"{"status":"accepted"}"#)
+            .create_async()
+            .await;
+
+        let client = LanefulClient::new(server.url(), "test-token").unwrap();
+        let response = client.send_one_async(sample_email()).await.unwrap();
+        drop(client);
+
+        mock.assert_async().await;
+        assert_eq!(response.status, "accepted");
     }
 }

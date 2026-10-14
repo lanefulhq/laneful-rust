@@ -198,6 +198,7 @@ See `examples/` for mail settings, domains, unsubscribe groups, and analytics.
 
 ## Notes
 
-- Async methods are available when the `async` feature is enabled.
+- Async methods are available when the `async` feature is enabled. A client used only through async methods is safe to create and drop inside a Tokio runtime; the blocking HTTP client is built on the first sync call.
+- Requests time out after 30 seconds.
 - TLS backend is `rustls` by default; use `native-tls` to switch.
 - Webhook event types include `request`, `delivery`, `open`, `click`, `drop`, `spam_complaint`, `unsubscribe`, and `bounce`.
