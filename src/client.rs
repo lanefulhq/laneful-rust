@@ -21,6 +21,9 @@ const USER_AGENT_VALUE: &str = concat!("laneful-rust/", env!("CARGO_PKG_VERSION"
 /// Request timeout for both the blocking and the async HTTP client.
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Maximum length of an idempotency key, in bytes, accepted by the send API.
+const MAX_IDEMPOTENCY_KEY_BYTES: usize = 36;
+
 /// Client for the Laneful Email API.
 ///
 /// Email sending uses a send host (`https://your-endpoint.send.laneful.net`).
@@ -40,6 +43,19 @@ pub struct LanefulClient {
     /// Async HTTP client (available when async feature is enabled).
     #[cfg(feature = "async")]
     async_client: reqwest::Client,
+}
+
+/// Checks the idempotency key against the send API's 1 to 36 byte limit.
+fn validate_mail_settings(mail_settings: Option<&MailSettings>) -> Result<()> {
+    let invalid = mail_settings
+        .and_then(|settings| settings.idempotency_key.as_deref())
+        .is_some_and(|key| key.is_empty() || key.len() > MAX_IDEMPOTENCY_KEY_BYTES);
+    if invalid {
+        return Err(LanefulError::ValidationError(
+            "idempotency_key must contain between 1 and 36 bytes".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn default_headers(api_key: &str) -> Result<HeaderMap> {
@@ -242,6 +258,7 @@ impl LanefulClient {
         emails: Vec<Email>,
         mail_settings: Option<MailSettings>,
     ) -> Result<SendEmailResponse> {
+        validate_mail_settings(mail_settings.as_ref())?;
         let request = SendEmailRequest {
             emails,
             mail_settings,
@@ -529,6 +546,7 @@ impl LanefulClient {
         emails: Vec<Email>,
         mail_settings: Option<MailSettings>,
     ) -> Result<SendEmailResponse> {
+        validate_mail_settings(mail_settings.as_ref())?;
         let request = SendEmailRequest {
             emails,
             mail_settings,
@@ -807,6 +825,7 @@ mod tests {
                 Some(MailSettings {
                     sandbox_mode: Some(true),
                     return_message_ids: Some(true),
+                    ..Default::default()
                 }),
             )
             .unwrap();
@@ -929,6 +948,52 @@ mod tests {
     fn rejects_empty_config() {
         assert!(LanefulClient::new("", "token").is_err());
         assert!(LanefulClient::new("https://test.laneful.net", "").is_err());
+    }
+
+    #[test]
+    fn send_includes_idempotency_key() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("POST", "/v1/email/send")
+            .match_body(Matcher::PartialJsonString(
+                r#"{"mail_settings":{"idempotency_key":"order-1234"}}"#.into(),
+            ))
+            .with_status(200)
+            .with_body(r#"{"status":"accepted"}"#)
+            .create();
+
+        let client = LanefulClient::new(server.url(), "test-token").unwrap();
+        let response = client
+            .send_one_with_mail_settings(
+                sample_email(),
+                Some(MailSettings {
+                    idempotency_key: Some("order-1234".into()),
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+
+        mock.assert();
+        assert_eq!(response.status, "accepted");
+    }
+
+    #[test]
+    fn rejects_invalid_idempotency_key_before_sending() {
+        let mut server = mockito::Server::new();
+        let mock = server.mock("POST", "/v1/email/send").expect(0).create();
+        let client = LanefulClient::new(server.url(), "test-token").unwrap();
+
+        for key in [String::new(), "k".repeat(37), "é".repeat(19)] {
+            let result = client.send_one_with_mail_settings(
+                sample_email(),
+                Some(MailSettings {
+                    idempotency_key: Some(key),
+                    ..Default::default()
+                }),
+            );
+            assert!(matches!(result, Err(LanefulError::ValidationError(_))));
+        }
+        mock.assert();
     }
 
     /// The client used to build a blocking reqwest client in `new`, which panics when

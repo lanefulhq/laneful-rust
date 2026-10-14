@@ -32,6 +32,7 @@ fn main() -> Result<()> {
         Some(MailSettings {
             sandbox_mode: Some(true),
             return_message_ids: Some(true),
+            ..Default::default()
         }),
     )?;
     println!("Status: {}", response.status);

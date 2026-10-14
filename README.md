@@ -90,10 +90,27 @@ let response = client.send_one_with_mail_settings(
     Some(MailSettings {
         sandbox_mode: Some(true),
         return_message_ids: Some(true),
+        ..Default::default()
     }),
 )?;
 println!("Status: {} {:?}", response.status, response.message_ids);
 ```
+
+### Duplicate send protection
+
+Set an idempotency key (1 to 36 bytes) and reuse it when you retry a send, for example after a timeout. The client does not retry on its own.
+
+```rust
+let response = client.send_one_with_mail_settings(
+    email,
+    Some(MailSettings {
+        idempotency_key: Some(format!("order-{order_id}")),
+        ..Default::default()
+    }),
+)?;
+```
+
+Laneful remembers a key per organization for one hour. A repeated request with the same key gets status `accepted` with no message IDs and sends nothing, even if the emails differ, so use a new key for every distinct send. If a request fails, the key is released and a retry with the same key is processed normally. Sandbox mode requests are not deduplicated. A key outside 1 to 36 bytes returns `LanefulError::ValidationError` before any request is sent.
 
 ## Domain, unsubscribe groups, and analytics
 

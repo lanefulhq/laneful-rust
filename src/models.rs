@@ -136,7 +136,7 @@ pub struct Email {
     pub tracking: Option<Tracking>,
 }
 
-/// Request-level mail settings (sandbox mode, return message IDs).
+/// Request-level mail settings (sandbox mode, return message IDs, idempotency key).
 ///
 /// Unset fields (`None`) are omitted. Explicit `Some(false)` is serialized.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -147,6 +147,11 @@ pub struct MailSettings {
     /// When enabled, the API response includes message IDs for each email sent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub return_message_ids: Option<bool>,
+    /// Key for duplicate send protection, 1 to 36 bytes. Laneful accepts a key once per
+    /// organization for one hour: a repeated request with the same key is answered with
+    /// status "accepted" (and no message IDs) and sends nothing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub idempotency_key: Option<String>,
 }
 
 /// Request body for sending emails.
@@ -205,6 +210,7 @@ mod tests {
             serde_json::to_value(MailSettings {
                 sandbox_mode: Some(false),
                 return_message_ids: Some(false),
+                ..Default::default()
             })
             .unwrap(),
             serde_json::json!({
