@@ -50,7 +50,8 @@ pub fn is_valid_webhook_event(event: &str) -> bool {
 ///
 /// # Returns
 ///
-/// `true` if the signature is valid, `false` otherwise.
+/// `true` if the signature is valid, `false` otherwise, including when `secret` or
+/// `signature` is empty.
 ///
 /// # Example
 ///
@@ -66,6 +67,9 @@ pub fn is_valid_webhook_event(event: &str) -> bool {
 /// }
 /// ```
 pub fn verify_webhook_signature(secret: &str, payload: &[u8], signature: &str) -> bool {
+    if secret.is_empty() || signature.is_empty() {
+        return false;
+    }
     // Accept the header as bare hex or "sha256=<hex>".
     let signature = signature.strip_prefix("sha256=").unwrap_or(signature);
     let mut mac =
@@ -109,5 +113,16 @@ mod tests {
         ));
         assert!(!verify_webhook_signature(secret, b"other", &valid));
         assert!(!verify_webhook_signature(secret, payload, ""));
+    }
+
+    #[test]
+    fn rejects_signatures_when_the_secret_is_empty() {
+        let payload = br#"{ "event": "delivery", "message_id": "H-1-abc" }"#;
+        // Anyone can compute the HMAC with an empty key, so it must not verify.
+        let mut mac = HmacSha256::new_from_slice(b"").unwrap();
+        mac.update(payload);
+        let forged = hex::encode(mac.finalize().into_bytes());
+
+        assert!(!verify_webhook_signature("", payload, &forged));
     }
 }
