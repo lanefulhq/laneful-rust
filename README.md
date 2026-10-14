@@ -7,22 +7,22 @@ Rust SDK for the Laneful email sending API.
 
 ## Install
 
-Add to `Cargo.toml`:
+Requires Rust 1.85 or later (edition 2024). Add to `Cargo.toml`:
 
 ```toml
-laneful-rs = "0.2"
+laneful-rs = "0.3"
 ```
 
 Async API:
 
 ```toml
-laneful-rs = { version = "0.2", features = ["async"] }
+laneful-rs = { version = "0.3", features = ["async"] }
 ```
 
 TLS backend (optional; defaults to rustls; use native-tls to switch):
 
 ```toml
-laneful-rs = { version = "0.2", features = ["native-tls"] }
+laneful-rs = { version = "0.3", features = ["native-tls"] }
 ```
 
 ## Quick usage
@@ -211,7 +211,11 @@ Run the sync example:
 cargo run --example sync -- --from sender@example.com --to recipient@example.com
 ```
 
-See `examples/` for mail settings, domains, unsubscribe groups, and analytics.
+See `examples/` for mail settings, domains, unsubscribe groups, and analytics. `examples/webhook_server.rs` is a webhook receiver that verifies signatures:
+
+```bash
+LANEFUL_WEBHOOK_SECRET=your-webhook-secret cargo run --example webhook_server
+```
 
 ## Notes
 
