@@ -103,8 +103,6 @@ These endpoints live on the organization API host. Point the client at it:
 let client = LanefulClient::new("https://api.laneful.net", "my-api-key")?;
 ```
 
-Development uses `https://api.dev.laneful.net`.
-
 ### Unsubscribe groups
 
 ```rust

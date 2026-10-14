@@ -16,8 +16,6 @@ export LANEFUL_ORG_BASE_URL="https://api.laneful.net"
 export LANEFUL_WORKSPACE_ID="1"
 ```
 
-Development org host is `https://api.dev.laneful.net`.
-
 ## Sync Example
 
 ```bash

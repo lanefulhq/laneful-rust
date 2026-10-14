@@ -58,7 +58,7 @@ pub fn is_valid_webhook_event(event: &str) -> bool {
 /// use laneful_rs::verify_webhook_signature;
 ///
 /// let secret = "my-webhook-secret";
-/// let payload = br#"{"event":"email.sent"}"#;
+/// let payload = br#"{"event":"delivery"}"#;
 /// let signature = "expected-signature-hex";
 ///
 /// if verify_webhook_signature(secret, payload, signature) {
