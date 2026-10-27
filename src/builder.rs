@@ -5,6 +5,7 @@ use crate::models::{Attachment, Email, EmailAddress, Tracking};
 use std::collections::HashMap;
 
 const MAX_RECIPIENTS: usize = 1000;
+// Length limits are UTF-8 bytes (`str::len`), as the send API counts them.
 const MAX_TAG_LENGTH: usize = 100;
 const MAX_WEBHOOK_DATA_KEYS: usize = 20;
 const MAX_WEBHOOK_DATA_KEY_LENGTH: usize = 50;
@@ -198,7 +199,7 @@ impl EmailBuilder {
         if let Some(tag) = &self.tag {
             if tag.len() > MAX_TAG_LENGTH {
                 return Err(LanefulError::ValidationError(
-                    "tag length exceeds 100 characters".into(),
+                    "tag length exceeds 100 bytes (UTF-8)".into(),
                 ));
             }
         }
@@ -213,12 +214,12 @@ impl EmailBuilder {
             for (key, value) in &self.webhook_data {
                 if key.len() > MAX_WEBHOOK_DATA_KEY_LENGTH {
                     return Err(LanefulError::ValidationError(
-                        "webhook_data key length exceeds 50 characters".into(),
+                        "webhook_data key length exceeds 50 bytes (UTF-8)".into(),
                     ));
                 }
                 if value.len() > MAX_WEBHOOK_DATA_VALUE_LENGTH {
                     return Err(LanefulError::ValidationError(
-                        "webhook_data value length exceeds 100 characters".into(),
+                        "webhook_data value length exceeds 100 bytes (UTF-8)".into(),
                     ));
                 }
             }
@@ -294,6 +295,33 @@ mod tests {
                 assert!(message.contains("20 keys"));
             }
             other => panic!("unexpected error: {other}"),
+        }
+    }
+
+    // "é" is 2 bytes in UTF-8: 25 fill a 50-byte key and 50 fill a 100-byte value.
+    #[test]
+    fn webhook_data_limits_count_utf8_bytes() {
+        let build = |key: String, value: String| {
+            Email::builder()
+                .from("sender@test.com", None)
+                .to("recipient@test.com", None)
+                .subject("Test")
+                .text_content("Hello")
+                .webhook_data(key, value)
+                .build()
+        };
+
+        assert!(build("é".repeat(25), "é".repeat(50)).is_ok());
+        for (key, value, expected) in [
+            ("é".repeat(26), "v".to_string(), "50 bytes"),
+            ("k".to_string(), "é".repeat(51), "100 bytes"),
+        ] {
+            match build(key, value).unwrap_err() {
+                LanefulError::ValidationError(message) => {
+                    assert!(message.contains(expected), "{message}")
+                }
+                other => panic!("unexpected error: {other}"),
+            }
         }
     }
 }
